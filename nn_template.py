@@ -100,12 +100,12 @@ class NN:
 
         ## TODO 3a: Compute activations for all the nodes with the corresponding
         ## activation function of each layer applied to the hidden nodes        
-        self.a = [X]
-        self.z = []  
-        
+        self.a = [X] 
+        self.z = [] 
+
         # Forward pass through hidden layers
         for i in range(len(self.weights) - 1):
-            z = self.a[i] @ self.weights[i] + self.biases[i]  
+            z = self.a[i] @ self.weights[i] + self.biases[i]  # biases[0]-->shape= 1 X cells_0th_Layer X  
             self.z.append(z)  
             a = self.activations[i](z) 
             self.a.append(a) 
@@ -135,13 +135,12 @@ class NN:
         N = y.shape[0]
         yhat = self.forward(X)
         epsilon = 1e-8
-
         y = y.reshape(N,1)
 
         ye = yhat + epsilon
         dl_dyhat = -(y/(ye) - (1-y)/(1-ye)) # N x 1
 
-        dz_output = dl_dyhat * self.activation_derivatives[-1](self.o)  # N x 1
+        dz_output = dl_dyhat * self.activation_derivatives[-1](self.o)  # N x 1, self.activation_derivatives[-1](self.o) mean dy/do where y=sigmod(o) 
         
         grad_out_weights = (self.a[-1].T @ dz_output) / N  # hidden_dims[-1] x 1
         grad_out_bias = np.sum(dz_output, axis=0, keepdims=True) / N  # 1 x 1
@@ -191,7 +190,7 @@ class NN:
         ### Calculate updated weights using methods as indicated by gd_flag
         updated_W = [None] * len(weights)
         updated_B = [None] * len(biases)
-
+        
         ## TODO 5a: Variant 1(gd_flag = 1): Vanilla GD with Static Learning Rate
         ## Use the hyperparameter learning_rate as the static learning rate
         if gd_flag == 1:
@@ -205,26 +204,27 @@ class NN:
         ## Use the parameter epoch for t
         ## Use the hyperparameter decay_constant as the decay constant
         elif gd_flag == 2:
+            if not hasattr(self, 'learning_rate'):
+                self.learning_rate = learning_rate
+
             for i in range(len(weights)):
                 updated_W[i] = weights[i] - learning_rate * delta_weights[i]
                 updated_B[i] = biases[i] - learning_rate * delta_biases[i]
-                learning_rate = learning_rate * np.exp(-(decay_constant*epoch))
+            self.learning_rate = self.learning_rate * np.exp(-(decay_constant*epoch))
 
         ## TODO 5c: Variant 3(gd_flag = 3): GD with Momentum
         ## Use the hyperparameters learning_rate and momentum
         elif gd_flag == 3:
             if not hasattr(self, 'velocity_w'):
-                self.velocity_w = 0
-                self.velocity_b = 0
-        
+                self.velocity_w = [0] * len(weights)
+                self.velocity_b = [0] * len(biases)
+                print(self.velocity_w)
             for i in range(len(weights)):
-                w = momentum * self.velocity_w + (1-momentum) * delta_weights[i]
-                b = momentum * self.velocity_b + (1-momentum) * delta_biases[i]
-
-                updated_W[i] = weights[i] - learning_rate * w
-                updated_B[i] = biases[i] - learning_rate * b
-            
-
+                self.velocity_w[i] = momentum * self.velocity_w[i] + (1-momentum) * delta_weights[i]
+                self.velocity_b[i] = momentum * self.velocity_b[i] + (1-momentum) * delta_biases[i]
+                updated_W[i] = weights[i] - learning_rate * self.velocity_w[i]
+                updated_B[i] = biases[i] - learning_rate * self.velocity_b[i]
+           
         return updated_W, updated_B
 
     def step_adam(self, weights, biases, delta_weights, delta_biases, optimizer_params):
@@ -247,13 +247,32 @@ class NN:
         eps = optimizer_params['eps']       
 
         ## TODO 6:dW, db Return updated weights and biases for the hidden layer based on the update rules for Adam Optimizer
-        v_w = 0
-        v_b = 0
-        for i in range(len(weights)):
-                v_w = beta * v_w + (1-beta) * delta_weights[i]
-                v_b = beta * v_b + (1-beta) * delta_biases[i]
-                s
+        updated_W = [None] * len(weights)
+        updated_B = [None] * len(biases)
 
+        if not (hasattr(self, 'velocity_w') or hasattr(self,'s_W')):
+                self.velocity_w = [0] * len(weights)
+                self.velocity_b = [0] * len(biases)
+                self.s_W = [0] * len(weights)
+                self.s_B = [0] * len(biases)
+                self.t = 0
+
+        for i in range(len(weights)):
+            self.velocity_w[i] = beta * self.velocity_w[i] + (1-beta) * delta_weights[i]
+            self.velocity_b[i] = beta * self.velocity_b[i] + (1-beta) * delta_biases[i]
+
+            self.s_W[i] = gamma * self.s_W[i] + (1 - gamma) * delta_weights[i] * delta_weights[i]
+            self.s_B[i] = gamma * self.s_B[i] + (1 - gamma) * delta_biases[i] * delta_biases[i]
+            
+            v_wcap = self.velocity_w[i]/(1+beta**self.t)
+            v_bcap = self.velocity_b[i]/(1+beta**self.t)
+            s_wcap =  self.s_W[i]/(1+gamma**self.t)
+            s_bcap =  self.s_B[i]/(1+gamma**self.t)
+            
+            updated_W[i] = weights[i] - (learning_rate * v_wcap) / (np.sqrt(s_wcap) + eps)
+            updated_B[i] = biases[i] - (learning_rate * v_bcap) / (np.sqrt(s_bcap) + eps)
+
+        self.t += 1 
         return updated_W, updated_B
 
     def train(self, X_train, y_train, X_eval, y_eval, num_epochs, batch_size, optimizer, optimizer_params):
@@ -328,24 +347,26 @@ if __name__ == "__main__":
     num_epochs = 30
     batch_size = 100
     activations = ['sigmoid', 'sigmoid']
+
+    '''
     optimizer = "bgd"
     optimizer_params = {
         'learning_rate': 0.1,
-        'gd_flag': 1,
+        'gd_flag': 3,
         'momentum': 0.99,
         'decay_constant': 0.2
     }
-    
+    '''
     # For Adam optimizer you can use the following
-    # optimizer = "adam"
-    # optimizer_params = {
-    #     'learning_rate': 0.01,
-    #     'beta1' : 0.9,
-    #     'beta2' : 0.999,
-    #     'eps' : 1e-8
-    # }
+    optimizer = "adam"
+    optimizer_params = {
+         'learning_rate': 0.01,
+         'beta' : 0.9,
+         'gamma' : 0.999,
+         'eps' : 1e-8
+    }
 
-     
+   
     model = NN(input_dim, hidden_dims)
     train_losses, test_losses = model.train(X_train, y_train, X_eval, y_eval,
                                     num_epochs, batch_size, optimizer, optimizer_params) #trained on concentric circle data 
