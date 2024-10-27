@@ -21,15 +21,14 @@ def Convolution_1D(
     Returns:
     np.array, output of the convolution
     """
-    
-    if len(array1) < len(array2):
-        raise ValueError("For 'valid' padding, the size of array1 must be greater than or equal to the size of array2.")
 
- 
     if padding == 'full':
         pad_width = array2.size - 1
         array1 = np.concatenate((np.zeros(pad_width), array1, np.zeros(pad_width)))
-    elif padding != 'valid':
+    elif padding == 'valid':
+        if len(array1) < len(array2):
+            raise ValueError("For 'valid' padding, the size of array1 must be greater than or equal to the size of array2.")
+    else:
         raise ValueError("Padding must be 'full' or 'valid'.")
     
     output_size = (len(array1) - len(array2)) // stride + 1
@@ -76,7 +75,7 @@ a2 = np.array([1,2,1])
 
 print(Convolution_1D(a1,a2,padding="full",stride=2))
 '''
-p_B = np.array([0.1, 0.2, 0.3, 0.1, 0.1, 0.2])
-p_A = np.array([0.3, 0.4, 0.3])
+p_A = np.array([0.1, 0.2, 0.3, 0.1, 0.1, 0.2])
+p_B = np.array([0.3, 0.4, 0.3])
 x= probability_sum_of_faces(p_A,p_B)
 print(x)
